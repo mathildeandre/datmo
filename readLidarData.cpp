@@ -24,7 +24,7 @@ Point mapToImage(float x, float y, int uo, int vo,
     return Point(u,v);
 }
 
-int main( int /*argc*/, char** /*argv*/ )
+int main3( int /*argc*/, char** /*argv*/ )
 {
   //  Read lidar data from a file
   Mat lidar_data;
