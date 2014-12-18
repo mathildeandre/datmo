@@ -24,7 +24,7 @@ Point mapToImage(float x, float y, int uo, int vo,
     return Point(u,v);
 }
 
-int main3( int /*argc*/, char** /*argv*/ )
+int main( int /*argc*/, char** /*argv*/ )
 {
   //  Read lidar data from a file
   Mat lidar_data;
@@ -63,15 +63,22 @@ int main3( int /*argc*/, char** /*argv*/ )
     KF.transitionMatrix = *(Mat_<float>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
     Mat_<float> measurement(2,1); measurement.setTo(Scalar(0));
 
-    KF.statePre.at<float>(0) = 550; //prediction are done with integers (100.x, 100.y)
-    KF.statePre.at<float>(1) = 1020;
+    KF.statePre.at<float>(0) = 549; //prediction are done with integers (100.x, 100.y)
+    KF.statePre.at<float>(1) = 1019;
     KF.statePre.at<float>(2) = 0.;
     KF.statePre.at<float>(3) = 0.;
 
     setIdentity(KF.measurementMatrix);
-    setIdentity(KF.processNoiseCov, Scalar::all(0.1));
-    setIdentity(KF.measurementNoiseCov, Scalar::all(0.1));
+    setIdentity(KF.processNoiseCov, Scalar::all(1));
+    setIdentity(KF.measurementNoiseCov, Scalar::all(0.0001));
     setIdentity(KF.errorCovPost, Scalar::all(0.1));
+
+    //Retarded kalman filter
+    /*
+    setIdentity(KF.processNoiseCov, Scalar::all(1e-4));
+    setIdentity(KF.measurementNoiseCov, Scalar::all(10));
+    setIdentity(KF.errorCovPost, Scalar::all(.1));
+    */
 
     float ROI[4] = {4.,9.,7.5,11.}; //store the Region of interest x1,y1,x2,y2 size : 2.5x2
 
@@ -130,11 +137,12 @@ int main3( int /*argc*/, char** /*argv*/ )
 
     //Kalman prediction (internal update)
     Mat prediction = KF.predict();
-    Point predictPt1(prediction.at<float>(0),prediction.at<float>(1));
+    //Point predictPt1(prediction.at<float>(0),prediction.at<float>(1));
 
     //Computation of mean pos within the ROI
     meanx /= nbVal;
     meany /= nbVal;
+    std::cout << "mean value of position in the ROI : x=" << meanx << ", y="<< meany << std::endl;
     measurement(0) = meanx*100;
     measurement(1) = meany*100;
 
@@ -147,13 +155,6 @@ int main3( int /*argc*/, char** /*argv*/ )
 
     Mat estimated = KF.correct(measurement);
     Point statePt(estimated.at<float>(0), estimated.at<float>(1));
-
-    std::cout << meanx << ", " << meany << std::endl;
-    std::cout << ROI[0] << ", " << ROI[1] << std::endl;
-    std::cout << ROI[2] << ", " << ROI[3] << std::endl;
-    std::cout << (float)statePt.x/100. << ", " << (float)statePt.y/100. << std::endl;
-
-
     //Draw Kalman rectangles prevision
     inImg1 = mapToImage((float)statePt.x/100.-1.5, (float)statePt.y/100.-1, uo, vo, camera_height, lidar_height, lidar_pitch_angle,camera_ty, alpha_u, alpha_v);
     inImg2 = mapToImage((float)statePt.x/100.+1.5, (float)statePt.y/100.+1, uo, vo, camera_height, lidar_height, lidar_pitch_angle,camera_ty, alpha_u, alpha_v);
