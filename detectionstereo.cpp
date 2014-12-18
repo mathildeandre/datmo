@@ -54,7 +54,8 @@ Mat computeVDisparity(Mat img){
     for(int u=0; u<img.rows;u++){
         for(int v=0; v<img.cols; v++){
             int disp = (img.at<unsigned char>(u,v)) /8;
-            if(disp>6 && disp < maxDisp-2){
+            //if(disp>0 && disp < maxDisp){
+            if(disp>6 && disp < maxDisp-2){ //We remove pixels of sky and car to compute the roadline
                 vDisp.at<unsigned char>(u,disp) += 1;
             }
         }
@@ -95,11 +96,10 @@ std::vector<Point2f> storeRemainingPoint(Mat img){
          for(int v=0; v<img.cols; v++){
             int value = img.at<unsigned char>(u,v);
             double test = orig + slope*value/16 - u;
-            std::cout <<"test : "<< test << std::endl;
-            if(test < -30){
-                res.at<unsigned char>(u,v) = 0;
-            }else{
+            if(abs(test) < 30){
                 res.at<unsigned char>(u,v) = value;
+            }else{
+                res.at<unsigned char>(u,v) = 0;
             }
          }
      }
@@ -124,15 +124,15 @@ int main(int argc, char **argv)
     Mat disp, disp8;
     disp = calculDisp(img1, img2);
     disp.convertTo(disp8, CV_8U);
-    imshow("diparity map", disp8);
+    imshow("diparity map (2.1.2)", disp8);
 
-    //2.2.1 remove the road (z<0.2m) and upper pixels(z>2.5m)
-    Mat imgRoad = compute3DAndRemove(disp8);
-    imshow("Disparity map with height filter", imgRoad);
+    //2.2.1, 2.2.2 remove the road (z<0.2m) and upper pixels(z>2.5m)
+    Mat dispFiltered = compute3DAndRemove(disp8);
+    imshow("Disparity map with height filter (2.2.2)", dispFiltered);
 
     //2.3.1 Compute VDisparity
     Mat vDispNoisy = computeVDisparity(disp);
-    imshow("VDisparity method", vDispNoisy);
+    imshow("VDisparity method (2.3.1)", vDispNoisy);
 
     //2.3.2 manually computation of ho & po :
     /* We measure a line y = 3.36x +143,56
@@ -144,18 +144,47 @@ int main(int argc, char **argv)
 
     //2.3.3 Removing noise from v disparity map
     Mat vDisp = removeNoise(vDispNoisy);
-    imshow("VDisparity map no noise", vDisp);
+    imshow("VDisparity map no noise (2.3.3)", vDisp);
 
     //2.3.3 extracting the remaining points and removing the floor
     std::vector<Point2f> tempVec = storeRemainingPoint(vDisp);
-    //fitLineRansac(tempVec, line, iteration, sigma, a_max);
-    Vec4f newline;
-    fitLineRansac(tempVec, newline);
-    std::cout << newline << std::endl;
+    Vec4f roadLine;
+    fitLineRansac(tempVec, roadLine);
+    std::cout << "2.3.3, road line : "<<roadLine << std::endl;
+    //2.3.4 removing pixels under the road according to the line of the road
+    Mat dispFiltered2 = filterRansac(roadLine, disp8);
+    imshow("Final Disparity filtered (2.3.4)", dispFiltered2);
 
-    Mat finalDisp = filterRansac(newline, disp8);
-    imshow("Final Disparity filtered", finalDisp);
+    Mat morph1, morph2;
+    //2.4.1 morphological erosion and dilatation :
+    int transf_type;
+    //transf_type = MORPH_RECT;
+    //transf_type = MORPH_CROSS;
+    transf_type = MORPH_ELLIPSE;
+    int transf_size = 8;
 
+    Mat element = getStructuringElement( transf_type,
+                                           Size( 2*transf_size + 1, 2*transf_size+1 ),
+                                           Point( transf_size, transf_size ) );
+    erode(dispFiltered,morph1,element);
+    //imshow("Erosion disparity (2.4.1)", morph1);
+    dilate(morph1, morph2, element);
+    imshow("Eroded then dilated disparity1 (2.4.1)", morph2);
+
+    Mat morph3, morph4;
+    erode(dispFiltered2,morph3,element);
+    //imshow("Erosion disparity (2.4.1)", morph3);
+    dilate(morph3, morph4, element);
+    imshow("Eroded then dilated disparity2 (2.4.1)", morph4);
+
+
+    //2.4.2 extraction of components using segmentDisparity
+    Mat segmentedDisparity;
+    segmentDisparity(morph2,segmentedDisparity);
+    //résultas un peu louches ici puisque les pincipaux obstacles sont enlevés...
+    //Les cluster paraissaient plus évident sur l'image erodée et dilatée.
+    //Aussi, on est censé avoir 1 couleur par objet ce qui n'est pas du tout le cas.
+    imshow("Segmented disparity1 (2.4.2)", segmentedDisparity*16);
 
     // Display images and wait for a key press
     waitKey();
